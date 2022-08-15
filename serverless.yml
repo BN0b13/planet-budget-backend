@@ -1,0 +1,66 @@
+service: aws-blog-backend #needs to match package.json name
+frameworkVersion: '3'
+
+useDotenv: true
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  stage: ${opt:stage, 'dev'}
+  environment:
+    USERS_TABLE: ${self:service}-usersTable-${self:provider.stage}
+    SALT_ROUNDS: ${env.SALT_ROUNDS}
+    JWT_SECRET: ${env.JWT_SECRET}
+  iam:
+    role:
+      name: ${self:service}-${self:provider.stage}-lambdaDynamoRole
+      statements:
+        - Effect: 'Allow'
+          Resource: '*'
+          Action: 'dynamodb:*'
+
+        - Effect: 'Allow'
+          Resource: '*'
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+
+functions:
+  server:
+    handler: server.server
+    events:
+      - http:
+          path: server # define Lambda endpoint
+          method: any # any HTTP method can access this Lambda - Get, Post, Delete, Patch
+          cors: true # enable CORS
+
+resources: # CloudFormation template syntax from here on.
+  Resources:
+    usersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-usersTable-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: "id"
+            AttributeType: "S"
+          - AttributeName: "username"
+            AttributeType: "S"
+        KeySchema:
+          - AttributeName: "username"
+            KeyType: "HASH"
+        GlobalSecondaryIndexes:
+          - IndexName: "GSI"
+            KeySchema:
+              - AttributeName: "id"
+                KeyType: "HASH"
+            Projection:
+              ProjectionType: "KEYS_ONLY"
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
